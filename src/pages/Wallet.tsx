@@ -1,14 +1,21 @@
 import React, { useState } from "react";
+import { useWallet } from "../contexts/WalletContext";
+import { useNotification } from "../hooks/useNotification";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 const Wallet = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [selectedWallet, setSelectedWallet] = useState("");
-  const [walletAddress, setWalletAddress] = useState("");
-  const [balance, setBalance] = useState({
-    SOL: 0,
-    USDC: 0
-  });
-  const [isConnecting, setIsConnecting] = useState(false);
+  const { 
+    isConnected, 
+    walletAddress, 
+    balance, 
+    connectWallet, 
+    disconnectWallet, 
+    isLoading, 
+    error,
+    refreshBalance 
+  } = useWallet();
+  
+  const { success, error: showError } = useNotification();
 
   const availableWallets = [
     {
@@ -23,14 +30,14 @@ const Wallet = () => {
       name: "Solflare",
       icon: "🔥",
       description: "功能強大的 Solana 錢包",
-      supported: true
+      supported: false
     },
     {
       id: "slope",
       name: "Slope",
       icon: "📱",
       description: "移動端優先的錢包",
-      supported: true
+      supported: false
     },
     {
       id: "backpack",
@@ -71,28 +78,31 @@ const Wallet = () => {
     }
   ];
 
-  const connectWallet = async (walletId: string) => {
-    setIsConnecting(true);
-    setSelectedWallet(walletId);
-    
-    // 模擬連接過程
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // 模擬連接成功
-    setIsConnected(true);
-    setWalletAddress("0x1234567890abcdef1234567890abcdef12345678");
-    setBalance({
-      SOL: 125.5,
-      USDC: 2500.0
-    });
-    setIsConnecting(false);
+  const handleConnectWallet = async () => {
+    try {
+      await connectWallet();
+      success('錢包連接成功', 'Phantom 錢包已成功連接');
+    } catch (err) {
+      showError('錢包連接失敗', err instanceof Error ? err.message : '請檢查是否安裝了 Phantom 錢包');
+    }
   };
 
-  const disconnectWallet = () => {
-    setIsConnected(false);
-    setSelectedWallet("");
-    setWalletAddress("");
-    setBalance({ SOL: 0, USDC: 0 });
+  const handleDisconnectWallet = () => {
+    try {
+      disconnectWallet();
+      success('錢包已斷開連接');
+    } catch (err) {
+      showError('斷開連接失敗', '無法斷開錢包連接');
+    }
+  };
+
+  const handleRefreshBalance = async () => {
+    try {
+      await refreshBalance();
+      success('餘額已更新');
+    } catch (err) {
+      showError('更新餘額失敗', '無法獲取最新餘額');
+    }
   };
 
   const getTransactionIcon = (type: string) => {
@@ -134,6 +144,12 @@ const Wallet = () => {
               <p className="text-gray-600">連接錢包以使用區塊鏈租屋功能</p>
             </div>
 
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800">{error}</p>
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-6">
               {availableWallets.map((wallet) => (
                 <div
@@ -143,7 +159,7 @@ const Wallet = () => {
                       ? "border-gray-200 hover:border-blue-500 hover:shadow-md"
                       : "border-gray-100 bg-gray-50 cursor-not-allowed"
                   }`}
-                  onClick={() => wallet.supported && connectWallet(wallet.id)}
+                  onClick={() => wallet.supported && handleConnectWallet()}
                 >
                   <div className="flex items-center mb-4">
                     <span className="text-3xl mr-3">{wallet.icon}</span>
@@ -155,10 +171,17 @@ const Wallet = () => {
                   
                   {wallet.supported ? (
                     <button
-                      disabled={isConnecting && selectedWallet === wallet.id}
+                      disabled={isLoading}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     >
-                      {isConnecting && selectedWallet === wallet.id ? "連接中..." : "連接"}
+                      {isLoading ? (
+                        <div className="flex items-center justify-center">
+                          <LoadingSpinner size="sm" color="white" />
+                          <span className="ml-2">連接中...</span>
+                        </div>
+                      ) : (
+                        "連接"
+                      )}
                     </button>
                   ) : (
                     <div className="text-center text-gray-500">
@@ -186,10 +209,10 @@ const Wallet = () => {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold mb-2">錢包資訊</h2>
-                  <p className="text-gray-600">已連接 {availableWallets.find(w => w.id === selectedWallet)?.name}</p>
+                  <p className="text-gray-600">已連接 Phantom 錢包</p>
                 </div>
                 <button
-                  onClick={disconnectWallet}
+                  onClick={handleDisconnectWallet}
                   className="px-4 py-2 border border-red-600 text-red-600 rounded-md hover:bg-red-50 transition-colors"
                 >
                   斷開連接
@@ -198,46 +221,29 @@ const Wallet = () => {
 
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">錢包地址</label>
-                  <div className="flex items-center space-x-2">
-                    <code className="bg-gray-100 px-3 py-2 rounded text-sm font-mono">
-                      {walletAddress}
-                    </code>
-                    <button className="text-blue-600 hover:text-blue-800 text-sm">
-                      複製
-                    </button>
+                  <h3 className="text-lg font-semibold mb-3">錢包地址</h3>
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-sm font-mono break-all">{walletAddress}</p>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">網路</label>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-sm">Solana Mainnet</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 餘額 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-xl font-semibold mb-4">餘額</h3>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="p-4 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg text-white">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm opacity-90">SOL 餘額</p>
-                      <p className="text-2xl font-bold">{balance.SOL.toFixed(4)}</p>
+                  <h3 className="text-lg font-semibold mb-3">餘額</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">SOL:</span>
+                      <span className="font-semibold">{balance.SOL.toFixed(4)} SOL</span>
                     </div>
-                    <div className="text-3xl">◎</div>
-                  </div>
-                </div>
-                <div className="p-4 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg text-white">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm opacity-90">USDC 餘額</p>
-                      <p className="text-2xl font-bold">{balance.USDC.toFixed(2)}</p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">USDC:</span>
+                      <span className="font-semibold">{balance.USDC.toFixed(2)} USDC</span>
                     </div>
-                    <div className="text-3xl">💵</div>
+                    <button
+                      onClick={handleRefreshBalance}
+                      disabled={isLoading}
+                      className="w-full mt-2 px-3 py-1 bg-blue-100 text-blue-600 rounded text-sm hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      更新餘額
+                    </button>
                   </div>
                 </div>
               </div>
@@ -245,47 +251,28 @@ const Wallet = () => {
 
             {/* 交易歷史 */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-xl font-semibold mb-4">交易歷史</h3>
+              <h2 className="text-2xl font-semibold mb-6">交易歷史</h2>
               <div className="space-y-4">
-                {mockTransactions.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <span className="text-2xl">{getTransactionIcon(tx.type)}</span>
+                {mockTransactions.map((transaction) => (
+                  <div key={transaction.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-3">{getTransactionIcon(transaction.type)}</span>
                       <div>
-                        <p className="font-medium">{tx.description}</p>
-                        <p className="text-sm text-gray-600">{tx.date}</p>
+                        <p className="font-semibold">{transaction.description}</p>
+                        <p className="text-sm text-gray-600">{transaction.date}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-semibold ${getTransactionColor(tx.type)}`}>
-                        {tx.type === "rent_payment" || tx.type === "deposit" ? "-" : "+"}
-                        {tx.amount} {tx.currency}
+                      <p className={`font-semibold ${getTransactionColor(transaction.type)}`}>
+                        {transaction.amount} {transaction.currency}
                       </p>
-                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(tx.status)}`}>
-                        {tx.status === "completed" ? "已完成" : tx.status === "pending" ? "處理中" : "失敗"}
+                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(transaction.status)}`}>
+                        {transaction.status === 'completed' ? '已完成' : 
+                         transaction.status === 'pending' ? '處理中' : '失敗'}
                       </span>
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* 快速操作 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-xl font-semibold mb-4">快速操作</h3>
-              <div className="grid md:grid-cols-3 gap-4">
-                <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="text-2xl mb-2">💸</div>
-                  <p className="font-medium">發送 SOL</p>
-                </button>
-                <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="text-2xl mb-2">📥</div>
-                  <p className="font-medium">接收 SOL</p>
-                </button>
-                <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="text-2xl mb-2">📊</div>
-                  <p className="font-medium">查看詳細</p>
-                </button>
               </div>
             </div>
           </div>
